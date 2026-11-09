@@ -50,7 +50,10 @@ mutation CreatePost($input: CreatePostInput!) {
 
 
 def main() -> int:
-    token = os.environ["BUFFER_TOKEN"]
+    raw = os.environ["BUFFER_TOKEN"]
+    # Remove invisible or non-ASCII characters that can sneak in when a token is copied.
+    token = "".join(ch for ch in raw if ch.isascii() and not ch.isspace())
+    print("token length:", len(token), "| non-ascii removed:", len(raw) - len(token))
     name = os.environ["VIDEO_NAME"]
     stem = os.environ["STEM"]
     due = slot_time(os.environ.get("CRON_EXPR", ""))
