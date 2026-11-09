@@ -79,7 +79,10 @@ def main() -> int:
         }}
         try:
             out = graphql(token, CREATE_POST, variables)
-            print(label, "->", json.dumps(out["createPost"], ensure_ascii=False))
+            result = out["createPost"]
+            print(label, "->", json.dumps(result, ensure_ascii=False))
+            if "post" not in result:
+                raise RuntimeError(f"Buffer rejected the post: {result}")
         except Exception as exc:  # keep going so the other platform still gets scheduled
             failed = True
             print(label, "FAILED:", exc, file=sys.stderr)
