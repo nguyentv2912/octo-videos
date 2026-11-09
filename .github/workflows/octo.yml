@@ -74,3 +74,13 @@ jobs:
           STEM: ${{ steps.files.outputs.stem }}
         run: |
           python3 scripts/schedule_buffer.py
+
+      - name: Save booked slots
+        if: success()
+        run: |
+          git add scripts/booked.json
+          git commit -m "Update booked Buffer slots" || echo "no slot change"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && break
+            sleep 5
+          done

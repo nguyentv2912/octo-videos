@@ -7,6 +7,7 @@ Manual runs (workflow_dispatch) default to the next 07:00 or 19:00 slot.
 import json
 import os
 import sys
+from pathlib import Path
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -57,6 +58,15 @@ def main() -> int:
     name = os.environ["VIDEO_NAME"]
     stem = os.environ["STEM"]
     due = slot_time(os.environ.get("CRON_EXPR", ""))
+    # If a channel already has a post at this time, move to the next hour (per the owner's rule).
+    booked_path = Path("scripts/booked.json")
+    booked = json.loads(booked_path.read_text()) if booked_path.exists() else {}
+    def taken(d):
+        key = d.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return any(key in booked.get(ch, []) for ch in (TIKTOK_CHANNEL, IG_CHANNEL))
+    while taken(due):
+        due += timedelta(hours=1)
+        print("slot taken, moving to", due.isoformat())
     caption = open(f"videos/{stem}.txt", encoding="utf-8").read().strip()
     video_url = f"{REPO_RAW}/{name}"
     dueAt = due.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -67,6 +77,7 @@ def main() -> int:
         ("instagram", IG_CHANNEL, {"instagram": {"type": "reel", "shouldShareToFeed": True, "isAiGenerated": True}}),
     ]
     failed = False
+    booked_key = due.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     for label, channel, metadata in jobs:
         variables = {"input": {
             "text": caption,
@@ -83,9 +94,11 @@ def main() -> int:
             print(label, "->", json.dumps(result, ensure_ascii=False))
             if "post" not in result:
                 raise RuntimeError(f"Buffer rejected the post: {result}")
+            booked.setdefault(channel, []).append(booked_key)
         except Exception as exc:  # keep going so the other platform still gets scheduled
             failed = True
             print(label, "FAILED:", exc, file=sys.stderr)
+    booked_path.write_text(json.dumps(booked, indent=2) + "\n")
     return 1 if failed else 0
 
 
