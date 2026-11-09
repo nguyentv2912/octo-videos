@@ -66,6 +66,19 @@ jobs:
             sleep 5
           done
 
+      - name: Wait until the video is public on GitHub raw
+        env:
+          VIDEO_NAME: ${{ steps.files.outputs.name }}
+        run: |
+          URL="https://raw.githubusercontent.com/nguyentv2912/octo-videos/main/videos/$VIDEO_NAME"
+          for i in $(seq 1 30); do
+            CODE=$(curl -sL -o /dev/null -w "%{http_code}" -r 0-0 "$URL" || true)
+            echo "attempt $i: $CODE"
+            if [ "$CODE" = "200" ] || [ "$CODE" = "206" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "video not reachable at $URL" && exit 1
+
       - name: Schedule Buffer posts (TikTok + Instagram)
         env:
           BUFFER_TOKEN: ${{ secrets.BUFFER_TOKEN }}
