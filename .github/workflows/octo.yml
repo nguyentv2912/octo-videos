@@ -1,0 +1,73 @@
+name: octo-daily
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 06:00 Asia/Ho_Chi_Minh (UTC+7) -> posts at 07:00
+    - cron: '0 11 * * *'   # 18:00 Asia/Ho_Chi_Minh -> posts at 19:00
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: octo-daily
+  cancel-in-progress: false
+
+jobs:
+  render-and-schedule:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-inter fonts-dejavu-core
+
+      - name: Install Python packages
+        run: pip install numpy scipy opencv-python-headless pillow
+
+      - name: Render today's video (random seed)
+        working-directory: engine
+        run: |
+          mkdir -p out
+          python3 octo_run.py
+
+      - name: Copy video and caption into videos/
+        id: files
+        run: |
+          set -e
+          SRC=$(ls engine/out/OCTO_AI_V6_seed*.mp4 | head -n 1)
+          NAME=$(basename "$SRC")
+          STEM="${NAME%.mp4}"
+          mkdir -p videos
+          cp "$SRC" "videos/$NAME"
+          cat > "videos/$STEM.txt" <<'CAPTION'
+          Capital → profit: an AI tool that scans Solana meme coin signals. Illustrative video, not real trading results. Not financial advice. Is this what you're looking for?
+
+          #Solana #memecoin #AI #crypto #buildinpublic
+          CAPTION
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "stem=$STEM" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push video
+        run: |
+          git config user.name "octo-bot"
+          git config user.email "octo-bot@users.noreply.github.com"
+          git add videos
+          git commit -m "Daily OCTO video ${{ steps.files.outputs.stem }}" || echo "nothing to commit"
+          git push
+
+      - name: Schedule Buffer posts (TikTok + Instagram)
+        env:
+          BUFFER_TOKEN: ${{ secrets.BUFFER_TOKEN }}
+          CRON_EXPR: ${{ github.event.schedule }}
+          VIDEO_NAME: ${{ steps.files.outputs.name }}
+          STEM: ${{ steps.files.outputs.stem }}
+        run: |
+          python3 scripts/schedule_buffer.py
